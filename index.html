@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>US Government Shutdown Visualized</title>
+<meta charset="utf-8"/>
+<meta property="og:title" content="US Government Shutdown Visualized" />
+<meta property="og:url" content="http://mihi-tr.github.io/us-shutdown/" />
+<meta property="og:image"
+content="http://mihi-tr.github.io/us-shutdown/shutdown.png" />
+<meta property="og:description" content="The US government is in shutdown -
+which departments are affected and how many people are sent home?"/>
+
+<link href='http://fonts.googleapis.com/css?family=Voces' rel='stylesheet' type='text/css'>
+<style>
+body { font-family: voces; }
+
+path.total {
+  opacity: 0.2;
+  }
+
+.content {
+  width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  }
+
+#graph {
+  width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  }
+
+switch body > div{
+  background: rgba(255,255,255,0.7);
+  color: black;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 75%;
+  vertical-align: middle;
+  }
+</style>
+<body>
+<div class="content">
+<h1>US Government Shutdown</h1>
+<div id="graph">
+</div>
+
+<p>Data from the <a
+href="http://www.washingtonpost.com/blogs/wonkblog/wp/2013/09/30/absolutely-everything-you-need-to-know-about-how-the-government-shutdown-will-work/?tid=pm_business_pop">Washington
+Post Wonkblog</a></p>
+<script src="vendor/js/d3.v3.min.js"></script>
+<script src="vendor/js/underscore-min.js"></script>
+<script>
+d3.csv("shutdown.csv", function(raw) {
+  var width=500;
+  var height=500;
+  var ri=100;
+  var ro=250;
+
+  colors=d3.scale.category20();
+
+  var totale=_.reduce(_.map(raw, function (x) {  
+    return parseInt(x.Employees) }),function (x,y) { return x+y })
+  
+  var rad=d3.scale.linear()
+    .domain([0,totale])
+    .range([0,2*Math.PI]);
+
+/*
+  var rd=d3.scale.linear()
+    .domain([0,100])
+    .range([ri,ro]); */
+
+  /// calculate radius based on area percentages.
+  var rd=function(d) {
+    var rho=rad(d.end-d.start);
+    var i=0.5*Math.pow(ri,2)*rho;
+    var p=(100-d.home)/100.0;
+    x2=Math.pow(ro,2)*p-(i*p-i)/(0.5*rho)
+    return Math.sqrt(x2);
+    }
+
+  var arc = d3.svg.arc()
+    .innerRadius(ri)
+    .outerRadius(ro)
+    .startAngle(function(d){return rad(d.start);})
+    .endAngle(function(d){return rad(d.end);});
+
+  var arcso = d3.svg.arc()
+    .innerRadius(ri)
+    .outerRadius(function(d) {return rd(d) })
+    .startAngle(function(d){return rad(d.start);})
+    .endAngle(function(d){return rad(d.end);});
+  
+  raw=_.sortBy(raw,function(d) { return -d.Employees })
+
+  data=[];
+  sa=0;
+  _.each(raw, function(d) {
+    data.push({"department":d.Department,
+     "description":d.Description,
+     "start":sa,
+     "end":sa+parseInt(d.Employees),
+     "home":parseInt(d.Home)})
+    sa=sa+parseInt(d.Employees);
+    })
+  console.log(data);
+
+  svg=d3.select("#graph")
+    .append("svg")
+    .attr("width",width)
+    .attr("height",height);
+  
+  g=svg.append("g")
+    .attr("transform","translate("+[width/2,height/2]+")")
+
+
+  depts=g.selectAll("g.depts")
+    .data(data)
+    .enter()
+    .append("g")
+    .attr("class","depts")
+    .on("mouseover",function(d) {
+     svg.append("switch")
+          .attr("id",d.department.replace(/ /g,"-"))
+          .append("foreignObject")
+          .attr("x",150)
+          .attr("y",150)
+          .attr("width",200)
+          .attr("height",200)
+          .attr("rx",10)
+          .attr("ry",10)
+          .append("xhtml:body")
+          .html("<div>"+
+                d.description+
+                "</div>");
+            
+
+          })  
+      .on("mouseout",function(d) {
+          d3.select("#"+d.department.replace(/ /g,"-")).remove(); 
+          })  
+
+
+   depts.append("path")
+    .attr("class","total")
+    .attr("d",arc)
+    .attr("style", function(d) { return "fill: "+
+        colors(d.department)})
+   
+   depts.append("path")
+    .attr("class","still")
+    .attr("d",arcso)
+    .attr("style", function(d) {
+      return "fill: "+
+        colors(d.department)})
+
+
+    /*
+    d3.selectAll("circle.wk")
+      .data(data)
+      .enter()
+      .append("circle")
+      .attr("class","wk")
+      .attr("cx",function(d) {
+       return xscale(d[p1])
+       })
+      .attr("cy",function(d) {
+        return yscale(d[p2])
+       })
+      .attr("r",function(d) {
+        return rscale(d.Wahlberechtigte)})
+      .attr("style",function(d) {
+        return "fill: "+colors(d.Bundesland)})
+      .on("mouseover",function(d) {
+        y=yscale(d[p2])
+        if (y+150 > height) {
+          y=height-150;
+          }
+        svg.append("switch")
+          .attr("id",d.id)
+          .append("foreignObject")
+          .attr("x",xscale(d[p1]))
+          .attr("y",y)
+          .attr("width",200)
+          .attr("height",200)
+          .attr("rx",10)
+          .attr("ry",10)
+          .append("xhtml:body")
+          .html("<div>"+
+                "<div>"+
+                d.Gebietsname+", "+d.Bundesland+
+                "</div><div>"+
+                p1 + ": "+d[p1].toFixed(2)+"%"+
+                "</div><div>"+
+                p2 + ": "+d[p2].toFixed(2)+"%"+
+                "</div>"+
+                "</div>");
+            
+
+          })  
+      .on("mouseout",function(d) {
+          d3.select("#"+d.id).remove(); 
+          })  
+           */
+      
+  })
+</script>
+
+
+</body>
